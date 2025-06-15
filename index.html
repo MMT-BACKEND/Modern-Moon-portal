@@ -8,17 +8,21 @@
   <style>
     body {
       font-family: 'Segoe UI', sans-serif;
-      background-color: #f0f2f5;
+      background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)),
+                  url('https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80') center/cover no-repeat fixed;
       margin: 0;
       padding: 20px;
+      min-height: 100vh;
     }
     .container {
       max-width: 500px;
       margin: auto;
-      background: white;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
       padding: 25px;
       border-radius: 12px;
-      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+      box-shadow: 0 0 25px rgba(0,0,0,0.3);
+      border: 1px solid rgba(255, 255, 255, 0.2);
     }
     h2 {
       text-align: center;
@@ -27,10 +31,14 @@
     input, button {
       width: 100%;
       padding: 12px;
-      margin: 10px 0;
+      margin: 8px 0;
       font-size: 16px;
       border-radius: 6px;
       border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    input {
+      text-align: center;
     }
     button {
       background-color: #007bff;
@@ -47,10 +55,12 @@
     }
     .details {
       display: none;
-      background-color: #e6f7ff;
+      background-color: rgba(230, 247, 255, 0.9);
+      backdrop-filter: blur(5px);
       padding: 15px;
       border-radius: 8px;
       margin-top: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
     }
     #qr-reader {
       width: 100%;
@@ -67,6 +77,7 @@
 <body>
   <div class="container">
     <h2>Certificate Validation</h2>
+    <input type="text" id="ownerName" placeholder="Enter access name" />
     <input type="text" id="certNumber" placeholder="Enter or scan certificate number" />
     <button id="validateBtn">Validate</button>
     <button id="startQRBtn">📷 Scan QR Code</button>
@@ -79,16 +90,40 @@
   <script>
     const certificates = {};
     let qrScanner;
-    let clearTimer;
 
     async function loadCSV() {
       try {
-        const res = await fetch("https://docs.google.com/spreadsheets/d/e/2PACX-1vQMYucQXqbGSsu-sugDNkKxO6XdmXYFvXnGEvzyVgT2VrG-37OrFqoc3QJGGJKgjG4ujUkvaEp8pze-/pub?output=csv");
+        const res = await fetch("https://docs.google.com/spreadsheets/d/e/2PACX-1vQMYucQXqbGSsu-sugDNkKxO6XdmXYFvXnGEvzyVgT2VrG-37OrFqoc3QJGGJKgjG4ujUkvaEp8pze-/pub?output=csv", {
+          redirect: 'follow'
+        });
+        
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        
         const csv = await res.text();
-        const rows = csv.trim().split("\n").slice(1);
-        rows.forEach(row => {
-          const [number, name, issueDate, validTill, sn, brand, model, status] = row.split(",");
-          if (number && name) {
+        console.log("CSV Data:", csv); // Debug log
+        
+        if (csv.includes('<HTML>')) {
+          throw new Error("Received HTML instead of CSV - check your Google Sheets sharing settings");
+        }
+        
+        const rows = csv.trim().split("\n");
+        console.log("Total rows:", rows.length); // Debug log
+        
+        if (rows.length < 2) {
+          throw new Error("CSV file appears to be empty or has no data rows");
+        }
+        
+        // Skip header row
+        const dataRows = rows.slice(1);
+        let validCerts = 0;
+        
+        dataRows.forEach(row => {
+          const columns = row.split(",");
+          const [number, name, issueDate, validTill, sn, brand, model, status, accessName] = columns;
+          
+          if (number && name && accessName) {
             certificates[number.trim()] = {
               name: name.trim(),
               number: number.trim(),
@@ -97,24 +132,46 @@
               sn: sn?.trim() || "",
               brand: brand?.trim() || "",
               model: model?.trim() || "",
-              status: status?.trim() || ""
+              status: status?.trim() || "",
+              accessName: accessName.trim()
             };
+            validCerts++;
           }
         });
+        
+        console.log("Loaded certificates:", validCerts); // Debug log
+        console.log("Certificates object:", certificates); // Debug log
+        
+        if (validCerts === 0) {
+          throw new Error("No valid certificates found in CSV data");
+        }
+        
       } catch (e) {
-        document.getElementById("result").textContent = "⚠️ Error loading certificate data.";
-        console.error(e);
+        document.getElementById("result").textContent = `⚠️ Error loading certificate data: ${e.message}`;
+        console.error("CSV Loading Error:", e);
       }
     }
 
     function validateCertificate() {
-      clearTimeout(clearTimer);
-      const input = document.getElementById("certNumber").value.trim();
+      const certInput = document.getElementById("certNumber").value.trim();
+      const accessInput = document.getElementById("ownerName").value.trim();
       const result = document.getElementById("result");
       const details = document.getElementById("certDetails");
 
-      const cert = certificates[input];
-      if (cert) {
+      console.log("Validating:", { certInput, accessInput }); // Debug log
+      console.log("Available certificates:", Object.keys(certificates)); // Debug log
+
+      if (!certInput || !accessInput) {
+        result.style.color = "orange";
+        result.textContent = "⚠️ Please enter both certificate number and access name.";
+        details.style.display = "none";
+        return;
+      }
+
+      const cert = certificates[certInput];
+      console.log("Found certificate:", cert); // Debug log
+      
+      if (cert && cert.accessName.toLowerCase() === accessInput.toLowerCase()) {
         result.style.color = "green";
         result.textContent = "✅ Certificate is valid.";
         details.style.display = "block";
@@ -130,16 +187,11 @@
         `;
       } else {
         result.style.color = "red";
-        result.textContent = "❌ Certificate not found.";
+        result.textContent = "❌ Invalid certificate or access information.";
         details.style.display = "none";
       }
 
-      // Auto-clear input/result after 20 seconds
-      clearTimer = setTimeout(() => {
-        document.getElementById("certNumber").value = "";
-        result.textContent = "";
-        details.style.display = "none";
-      }, 10000);
+      
     }
 
     function startQRScan() {
