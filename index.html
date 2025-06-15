@@ -79,6 +79,7 @@
   <script>
     const certificates = {};
     let qrScanner;
+    let clearTimer;
 
     async function loadCSV() {
       try {
@@ -86,13 +87,17 @@
         const csv = await res.text();
         const rows = csv.trim().split("\n").slice(1);
         rows.forEach(row => {
-          const [number, name, issueDate, validTill] = row.split(",");
-          if (number && name && issueDate && validTill) {
+          const [number, name, issueDate, validTill, sn, brand, model, status] = row.split(",");
+          if (number && name) {
             certificates[number.trim()] = {
               name: name.trim(),
               number: number.trim(),
-              issueDate: issueDate.trim(),
-              validTill: validTill.trim()
+              issueDate: issueDate?.trim() || "",
+              validTill: validTill?.trim() || "",
+              sn: sn?.trim() || "",
+              brand: brand?.trim() || "",
+              model: model?.trim() || "",
+              status: status?.trim() || ""
             };
           }
         });
@@ -103,6 +108,7 @@
     }
 
     function validateCertificate() {
+      clearTimeout(clearTimer);
       const input = document.getElementById("certNumber").value.trim();
       const result = document.getElementById("result");
       const details = document.getElementById("certDetails");
@@ -117,12 +123,23 @@
           <p><strong>Certificate Number:</strong> ${cert.number}</p>
           <p><strong>Issue Date:</strong> ${cert.issueDate}</p>
           <p><strong>Valid Till:</strong> ${cert.validTill}</p>
+          <p><strong>S/N:</strong> ${cert.sn}</p>
+          <p><strong>Brand:</strong> ${cert.brand}</p>
+          <p><strong>Model:</strong> ${cert.model}</p>
+          <p><strong>Status:</strong> ${cert.status}</p>
         `;
       } else {
         result.style.color = "red";
         result.textContent = "❌ Certificate not found.";
         details.style.display = "none";
       }
+
+      // Auto-clear input/result after 10 seconds
+      clearTimer = setTimeout(() => {
+        document.getElementById("certNumber").value = "";
+        result.textContent = "";
+        details.style.display = "none";
+      }, 10000);
     }
 
     function startQRScan() {
@@ -140,7 +157,7 @@
           validateCertificate();
         },
         errorMsg => {
-          // Optional: console.log(errorMsg);
+          // Silent error
         }
       ).catch(err => {
         console.error("QR scanner start error:", err);
@@ -149,9 +166,7 @@
 
     function stopQRScan() {
       if (qrScanner) {
-        qrScanner.stop().then(() => {
-          qrScanner.clear();
-        });
+        qrScanner.stop().then(() => qrScanner.clear());
       }
       document.getElementById("qr-reader").style.display = "none";
       document.getElementById("startQRBtn").style.display = "block";
@@ -164,7 +179,6 @@
       document.getElementById("startQRBtn").addEventListener("click", startQRScan);
       document.getElementById("stopQRBtn").addEventListener("click", stopQRScan);
 
-      // Optional: validate directly from URL parameter ?cert=
       const cert = new URLSearchParams(window.location.search).get("cert");
       if (cert) {
         document.getElementById("certNumber").value = cert.trim();
