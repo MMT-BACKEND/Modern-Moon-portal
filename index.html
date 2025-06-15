@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Certificate Validation with QR</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.7/html5-qrcode.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f0f2f5;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 500px;
+      margin: auto;
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+    h2 {
+      text-align: center;
+      font-size: 22px;
+    }
+    input, button {
+      width: 100%;
+      padding: 12px;
+      margin: 10px 0;
+      font-size: 16px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    #result {
+      font-weight: bold;
+      text-align: center;
+      margin-top: 15px;
+    }
+    .details {
+      display: none;
+      background-color: #e6f7ff;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+    }
+    #qr-reader {
+      width: 100%;
+      margin-top: 20px;
+      display: none;
+    }
+    #stopQRBtn {
+      background-color: #dc3545;
+      color: white;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Certificate Validation</h2>
+    <input type="text" id="certNumber" placeholder="Enter or scan certificate number" />
+    <button id="validateBtn">Validate</button>
+    <button id="startQRBtn">📷 Scan QR Code</button>
+    <button id="stopQRBtn">🛑 Stop QR Scan</button>
+    <div id="qr-reader"></div>
+    <p id="result"></p>
+    <div id="certDetails" class="details"></div>
+  </div>
+
+  <script>
+    const certificates = {};
+    let qrScanner;
+
+    async function loadCSV() {
+      try {
+        const res = await fetch("https://docs.google.com/spreadsheets/d/e/2PACX-1vQMYucQXqbGSsu-sugDNkKxO6XdmXYFvXnGEvzyVgT2VrG-37OrFqoc3QJGGJKgjG4ujUkvaEp8pze-/pub?output=csv");
+        const csv = await res.text();
+        const rows = csv.trim().split("\n").slice(1);
+        rows.forEach(row => {
+          const [number, name, issueDate, validTill] = row.split(",");
+          if (number && name && issueDate && validTill) {
+            certificates[number.trim()] = {
+              name: name.trim(),
+              number: number.trim(),
+              issueDate: issueDate.trim(),
+              validTill: validTill.trim()
+            };
+          }
+        });
+      } catch (e) {
+        document.getElementById("result").textContent = "⚠️ Error loading certificate data.";
+        console.error(e);
+      }
+    }
+
+    function validateCertificate() {
+      const input = document.getElementById("certNumber").value.trim();
+      const result = document.getElementById("result");
+      const details = document.getElementById("certDetails");
+
+      const cert = certificates[input];
+      if (cert) {
+        result.style.color = "green";
+        result.textContent = "✅ Certificate is valid.";
+        details.style.display = "block";
+        details.innerHTML = `
+          <p><strong>Name:</strong> ${cert.name}</p>
+          <p><strong>Certificate Number:</strong> ${cert.number}</p>
+          <p><strong>Issue Date:</strong> ${cert.issueDate}</p>
+          <p><strong>Valid Till:</strong> ${cert.validTill}</p>
+        `;
+      } else {
+        result.style.color = "red";
+        result.textContent = "❌ Certificate not found.";
+        details.style.display = "none";
+      }
+    }
+
+    function startQRScan() {
+      document.getElementById("qr-reader").style.display = "block";
+      document.getElementById("startQRBtn").style.display = "none";
+      document.getElementById("stopQRBtn").style.display = "block";
+
+      qrScanner = new Html5Qrcode("qr-reader");
+      qrScanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        qrCodeMessage => {
+          document.getElementById("certNumber").value = qrCodeMessage.trim();
+          stopQRScan();
+          validateCertificate();
+        },
+        errorMsg => {
+          // Optional: console.log(errorMsg);
+        }
+      ).catch(err => {
+        console.error("QR scanner start error:", err);
+      });
+    }
+
+    function stopQRScan() {
+      if (qrScanner) {
+        qrScanner.stop().then(() => {
+          qrScanner.clear();
+        });
+      }
+      document.getElementById("qr-reader").style.display = "none";
+      document.getElementById("startQRBtn").style.display = "block";
+      document.getElementById("stopQRBtn").style.display = "none";
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      await loadCSV();
+      document.getElementById("validateBtn").addEventListener("click", validateCertificate);
+      document.getElementById("startQRBtn").addEventListener("click", startQRScan);
+      document.getElementById("stopQRBtn").addEventListener("click", stopQRScan);
+
+      // Optional: validate directly from URL parameter ?cert=
+      const cert = new URLSearchParams(window.location.search).get("cert");
+      if (cert) {
+        document.getElementById("certNumber").value = cert.trim();
+        validateCertificate();
+      }
+    });
+  </script>
+</body>
+</html>
