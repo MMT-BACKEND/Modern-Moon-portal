@@ -79,6 +79,8 @@
   <script>
     const certificates = {};
     let qrScanner;
+    let clearTimer;
+
     async function loadCSV() {
       try {
         const res = await fetch("https://docs.google.com/spreadsheets/d/e/2PACX-1vQMYucQXqbGSsu-sugDNkKxO6XdmXYFvXnGEvzyVgT2VrG-37OrFqoc3QJGGJKgjG4ujUkvaEp8pze-/pub?output=csv");
@@ -87,7 +89,7 @@
         rows.forEach(row => {
           const [number, name, issueDate, validTill, sn, brand, model, status] = row.split(",");
           if (number && name) {
-            certificates[number.trim().toLowerCase()] = {
+            certificates[number.trim()] = {
               name: name.trim(),
               number: number.trim(),
               issueDate: issueDate?.trim() || "",
@@ -111,7 +113,7 @@
       const result = document.getElementById("result");
       const details = document.getElementById("certDetails");
 
-      const cert = certificates[input.toLowerCase()];
+      const cert = certificates[input];
       if (cert) {
         result.style.color = "green";
         result.textContent = "✅ Certificate is valid.";
@@ -132,7 +134,12 @@
         details.style.display = "none";
       }
 
-    
+      // Auto-clear input/result after 10 seconds
+      clearTimer = setTimeout(() => {
+        document.getElementById("certNumber").value = "";
+        result.textContent = "";
+        details.style.display = "none";
+      }, 10000);
     }
 
     function startQRScan() {
